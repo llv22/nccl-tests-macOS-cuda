@@ -67,3 +67,10 @@ All tests support the same set of arguments :
 
 NCCL tests are provided under the BSD licence. All source code and accompanying documentation is copyright (c) 2016-2019, NVIDIA CORPORATION. All rights reserved.
 
+## macOS version
+
+1. generation of start example:
+
+```bash
+./build/all_reduce_perf -b 8 -e 128M -f 2 -g 2
+```

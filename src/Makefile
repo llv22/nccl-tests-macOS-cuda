@@ -26,8 +26,16 @@ NVCC_GENCODE ?= -gencode=arch=compute_30,code=sm_30 \
 NVCUFLAGS  := -ccbin $(CXX) $(NVCC_GENCODE) -std=c++14
 
 # https://stackoverflow.com/questions/32174861/why-implicit-declaration-of-pthread-yield-with-lpthread-while-all-ok-with-pthr
-LDFLAGS    := -L${CUDA_LIB} -lcudart -lrt
-NVLDFLAGS  := -L${CUDA_LIB} -lcudart -lrt
+# https://github.com/bittorrent/libutp/commit/7732c1556e5adffd984b6a458af3f7cc457c82e7
+lrt:=$(shell echo "int main() {}"|gcc -x c - -lrt 2>&1)
+
+ifeq ($(lrt),)
+	LDFLAGS    := -L${CUDA_LIB} -lcudart -lrt
+	NVLDFLAGS  := -L${CUDA_LIB} -lcudart -lrt
+else
+	LDFLAGS    := -L${CUDA_LIB} -lcudart -ldl -lpthread
+	NVLDFLAGS  := -L${CUDA_LIB} -lcudart -ldl -lpthread
+endif
 
 ifeq ($(DEBUG), 0)
 NVCUFLAGS += -O3 -g

@@ -95,9 +95,16 @@ testResult_t AllGatherRunTest(struct threadArgs* args, int root, ncclDataType_t 
   return testSuccess;
 }
 
-struct testEngine allGatherEngine = {
-  AllGatherGetBuffSize,
-  AllGatherRunTest
-};
-
-#pragma weak ncclTestEngine=allGatherEngine
+// refer to https://github.com/NVIDIA/nccl-tests/issues/50
+#if defined(__APPLE__) && defined(__MACH__)
+  struct testEngine ncclTestEngine = {
+    AllGatherGetBuffSize,
+    AllGatherRunTest
+  };
+#else
+  struct testEngine allGatherEngine = {
+    AllGatherGetBuffSize,
+    AllGatherRunTest
+  };
+  #pragma weak ncclTestEngine=allGatherEngine
+#endif

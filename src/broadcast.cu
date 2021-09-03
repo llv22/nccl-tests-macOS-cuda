@@ -112,9 +112,16 @@ testResult_t BroadcastRunTest(struct threadArgs* args, int root, ncclDataType_t 
   return testSuccess;
 }
 
-struct testEngine broadcastEngine = {
-  BroadcastGetBuffSize,
-  BroadcastRunTest
-};
-
-#pragma weak ncclTestEngine=broadcastEngine
+// refer to https://github.com/NVIDIA/nccl-tests/issues/50
+#if defined(__APPLE__) && defined(__MACH__)
+  struct testEngine ncclTestEngine = {
+    BroadcastGetBuffSize,
+    BroadcastRunTest
+  };
+#else
+  struct testEngine broadcastEngine = {
+      BroadcastGetBuffSize,
+      BroadcastRunTest
+    };
+  #pragma weak ncclTestEngine=broadcastEngine
+#endif
