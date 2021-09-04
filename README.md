@@ -72,5 +72,19 @@ NCCL tests are provided under the BSD licence. All source code and accompanying 
 1. generation of start example:
 
 ```bash
+make NCCL_HOME=/Users/llv23/Documents/05_machine_learning/dl_gpu_mac/drivers_mac/nccl-osx/nccl-2.5.7-test CXX=clang++ 
+make NCCL_HOME=/Users/llv23/Documents/05_machine_learning/dl_gpu_mac/drivers_mac/nccl-osx-origin/nccl-2.5.7 CXX=clang++ 
 ./build/all_reduce_perf -b 8 -e 128M -f 2 -g 2
+./build/all_gather_perf -b 8 -e 128M -f 2 -g 2
+./build/broadcast_perf -b 8 -e 128M -f 2 -g 2
+./build/reduce_perf -b 8 -e 128M -f 2 -g 2
+./build/reduce_scatter_perf -b 8 -e 128M -f 2 -g 2
+```
+
+Issue: 1, library out of sync, refer to <http://sd.jtimothyking.com/2018/07/26/stub-file-and-library-file-out-of-sync/>  
+
+```bash
+sudo mv /Library/Developer/CommandLineTools /Library/Developer/CommandLineTools.old
+xcode-select --install
+sudo rm -rf /Library/Developer/CommandLineTools.old
 ```
