@@ -3,7 +3,8 @@
         {
             "name": "Mac",
             "includePath": [
-                "${workspaceFolder}/**"
+                "${workspaceFolder}/**",
+                "/Developer/NVIDIA/CUDA-10.1/include"
             ],
             "defines": [],
             "macFrameworkPath": [

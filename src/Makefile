@@ -33,8 +33,8 @@ ifeq ($(lrt),)
 	LDFLAGS    := -L${CUDA_LIB} -lcudart -lrt
 	NVLDFLAGS  := -L${CUDA_LIB} -lcudart -lrt
 else
-	LDFLAGS    := -L${CUDA_LIB} -lcudart -ldl -lpthread
-	NVLDFLAGS  := -L${CUDA_LIB} -lcudart -ldl -lpthread
+	LDFLAGS    := -L${CUDA_LIB} -lcudart
+	NVLDFLAGS  := -L${CUDA_LIB} -lcudart
 endif
 
 ifeq ($(DEBUG), 0)
@@ -85,5 +85,5 @@ ${DST_DIR}/%.o: %.cu common.h
 ${DST_DIR}/%_perf:${DST_DIR}/%.o ${DST_DIR}/common.o
 	@printf "Linking  %-35s > %s\n" $< $@
 	@mkdir -p ${DST_DIR}
-	$(NVCC) -o $@ $(NVCUFLAGS) $^ ${NVLDFLAGS}
+	$(NVCC) -o $@ $(NVCUFLAGS) $^ ${NVLDFLAGS} -v
 
