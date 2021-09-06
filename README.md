@@ -71,6 +71,8 @@ NCCL tests are provided under the BSD licence. All source code and accompanying 
 
 1. generation of start example:
 
+add ```export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/i058959/dl-frameworks/nccl/nccl-2.5.7/lib``` before running and do overwriting the default nccl home in order to test your built libraries
+
 ```bash
 make NCCL_HOME=/Users/llv23/Documents/05_machine_learning/dl_gpu_mac/drivers_mac/nccl-osx/nccl-2.5.7-test CXX=clang++ 
 make NCCL_HOME=/Users/llv23/Documents/05_machine_learning/dl_gpu_mac/drivers_mac/nccl-osx-origin/nccl-2.5.7 CXX=clang++ 
