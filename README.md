@@ -25,11 +25,13 @@ NCCL tests can run on multiple processes, multiple threads, and multiple CUDA de
 ### Quick examples
 
 Run on 8 GPUs (`-g 8`), scanning from 8 Bytes to 128MBytes :
+
 ```shell
 $ ./build/all_reduce_perf -b 8 -e 128M -f 2 -g 8
 ```
 
 Run with MPI on 40 processes (potentially on multiple nodes) with 4 GPUs each, disabling checks :
+
 ```shell
 $ mpirun -np 40 ./build/all_reduce_perf -b 8 -e 128M -f 2 -g 4 -c 0
 ```
@@ -80,6 +82,16 @@ make NCCL_HOME=/Users/llv23/Documents/05_machine_learning/dl_gpu_mac/drivers_mac
 ./build/broadcast_perf -b 8 -e 128M -f 2 -g 2
 ./build/reduce_perf -b 8 -e 128M -f 2 -g 2
 ./build/reduce_scatter_perf -b 8 -e 128M -f 2 -g 2
+```
+
+loading with INFO trace, via the following commands:
+
+```bash
+NCCL_DEBUG=INFO ./build/all_reduce_perf -b 8 -e 128M -f 2 -g 2
+NCCL_DEBUG=INFO ./build/all_gather_perf -b 8 -e 128M -f 2 -g 2
+NCCL_DEBUG=INFO ./build/broadcast_perf -b 8 -e 128M -f 2 -g 2
+NCCL_DEBUG=INFO ./build/reduce_perf -b 8 -e 128M -f 2 -g 2
+NCCL_DEBUG=INFO ./build/reduce_scatter_perf -b 8 -e 128M -f 2 -g 2
 ```
 
 Issue: 1, library out of sync, refer to <http://sd.jtimothyking.com/2018/07/26/stub-file-and-library-file-out-of-sync/>  
