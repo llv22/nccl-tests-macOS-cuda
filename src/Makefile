@@ -85,5 +85,5 @@ ${DST_DIR}/%.o: %.cu common.h
 ${DST_DIR}/%_perf:${DST_DIR}/%.o ${DST_DIR}/common.o
 	@printf "Linking  %-35s > %s\n" $< $@
 	@mkdir -p ${DST_DIR}
-	$(NVCC) -o $@ $(NVCUFLAGS) $^ ${NVLDFLAGS} -v
+	$(NVCC) -o $@ $(NVCUFLAGS) $^ ${NVLDFLAGS}
 
