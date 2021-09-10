@@ -76,7 +76,7 @@ NCCL tests are provided under the BSD licence. All source code and accompanying 
 add ```export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/i058959/dl-frameworks/nccl/nccl-2.5.7/lib``` before running and do overwriting the default nccl home in order to test your built libraries
 
 ```bash
-make NCCL_HOME=/Users/llv23/Documents/05_machine_learning/dl_gpu_mac/drivers_mac/nccl-osx/nccl-2.5.7 CXX=clang++  
+make NCCL_HOME=/Users/llv23/Documents/05_machine_learning/dl_gpu_mac/drivers_mac/nccl-osx/nccl-2.5.7 CXX=clang++ -j12  
 ./build/all_reduce_perf -b 8 -e 128M -f 2 -g 2
 ./build/all_gather_perf -b 8 -e 128M -f 2 -g 2
 ./build/broadcast_perf -b 8 -e 128M -f 2 -g 2
@@ -92,6 +92,12 @@ NCCL_DEBUG=INFO ./build/all_gather_perf -b 8 -e 128M -f 2 -g 2
 NCCL_DEBUG=INFO ./build/broadcast_perf -b 8 -e 128M -f 2 -g 2
 NCCL_DEBUG=INFO ./build/reduce_perf -b 8 -e 128M -f 2 -g 2
 NCCL_DEBUG=INFO ./build/reduce_scatter_perf -b 8 -e 128M -f 2 -g 2
+```
+
+enabling trace, refer to <https://github.com/NVIDIA/nccl/issues/197>:
+
+```bash
+NCCL_DEBUG=INFO NCCL_DEBUG_FLAGS=TRACE ./build/all_reduce_perf -b 8 -e 128M -f 2 -g 2
 ```
 
 Issue: 1, library out of sync, refer to <http://sd.jtimothyking.com/2018/07/26/stub-file-and-library-file-out-of-sync/>  
