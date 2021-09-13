@@ -87,6 +87,7 @@ make NCCL_HOME=/Users/llv23/Documents/05_machine_learning/dl_gpu_mac/drivers_mac
 loading with INFO trace, via the following commands:
 
 ```bash
+export DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH:~/Documents/05_machine_learning/dl_gpu_mac/drivers_mac/nccl-osx/build/lib #load dynamic library from runtime
 NCCL_DEBUG=INFO ./build/all_reduce_perf -b 8 -e 128M -f 2 -g 2
 NCCL_DEBUG=INFO ./build/all_gather_perf -b 8 -e 128M -f 2 -g 2
 NCCL_DEBUG=INFO ./build/broadcast_perf -b 8 -e 128M -f 2 -g 2
@@ -106,4 +107,10 @@ Issue: 1, library out of sync, refer to <http://sd.jtimothyking.com/2018/07/26/s
 sudo mv /Library/Developer/CommandLineTools /Library/Developer/CommandLineTools.old
 xcode-select --install
 sudo rm -rf /Library/Developer/CommandLineTools.old
+```
+
+Issue: 2, create network, refer to https://github.com/NVIDIA/nccl/issues/352
+
+```bash
+NCCL_DEBUG=INFO NCCL_SOCKET_IFNAME=lo NCCL_SOCKET_IFNAME=lo ./build/all_reduce_perf -b 8 -e 128M -f 2 -g 2
 ```
