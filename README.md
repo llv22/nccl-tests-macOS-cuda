@@ -1,6 +1,10 @@
-# NCCL Tests
+# NCCL on macOS Tests
 
-These tests check both the performance and the correctness of [NCCL](http://github.com/nvidia/nccl) operations.
+These tests check both the performance and the correctness of NCCL operations. They can be compiled against [NCCL](http://github.com/nvidia/nccl)
+
+In order to make library and nccl-test compatible, each nccl library version will be unique mapped to nccl-test on macOS version. When you start your work from my version, please also keep in mind.
+
+* [nccl-2.5.7-1-release](https://github.com/llv22/nccl-osx/tree/dev-2.5.7-for-jax) should be tested by [nccl-tests-v2.0.0 on mac](https://github.com/llv22/nccl-tests-macOS-cuda/tree/v2.0.0-built).
 
 ## Build
 
@@ -25,11 +29,13 @@ NCCL tests can run on multiple processes, multiple threads, and multiple CUDA de
 ### Quick examples
 
 Run on 8 GPUs (`-g 8`), scanning from 8 Bytes to 128MBytes :
+
 ```shell
 $ ./build/all_reduce_perf -b 8 -e 128M -f 2 -g 8
 ```
 
-Run with MPI on 40 processes (potentially on multiple nodes) with 4 GPUs each :
+Run with MPI on 40 processes (potentially on multiple nodes) with 4 GPUs each, disabling checks :
+
 ```shell
 $ mpirun -np 40 ./build/all_reduce_perf -b 8 -e 128M -f 2 -g 4
 ```
@@ -68,5 +74,55 @@ All tests support the same set of arguments :
 
 ## Copyright
 
-NCCL tests are provided under the BSD license. All source code and accompanying documentation is copyright (c) 2016-2021, NVIDIA CORPORATION. All rights reserved.
+NCCL tests are provided under the BSD licence. All source code and accompanying documentation is copyright (c) 2016-2019, NVIDIA CORPORATION. All rights reserved.
 
+## macOS version
+
+1. generation of start example:
+
+add ```export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/i058959/dl-frameworks/nccl/nccl-2.5.7/lib``` before running and do overwriting the default nccl home in order to test your built libraries
+
+```bash
+make NCCL_HOME=/Users/llv23/Documents/05_machine_learning/dl_gpu_mac/drivers_mac/nccl-osx/nccl-2.5.7 CXX=clang++ -j12  
+./build/all_reduce_perf -b 8 -e 128M -f 2 -g 2
+./build/all_gather_perf -b 8 -e 128M -f 2 -g 2
+./build/broadcast_perf -b 8 -e 128M -f 2 -g 2
+./build/reduce_perf -b 8 -e 128M -f 2 -g 2
+./build/reduce_scatter_perf -b 8 -e 128M -f 2 -g 2
+```
+
+loading with INFO trace, via the following commands:
+
+```bash
+export DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH:~/Documents/05_machine_learning/dl_gpu_mac/drivers_mac/nccl-osx/build/lib #load dynamic library from runtime
+NCCL_DEBUG=INFO ./build/all_reduce_perf -b 8 -e 128M -f 2 -g 2
+NCCL_DEBUG=INFO ./build/all_gather_perf -b 8 -e 128M -f 2 -g 2
+NCCL_DEBUG=INFO ./build/broadcast_perf -b 8 -e 128M -f 2 -g 2
+NCCL_DEBUG=INFO ./build/reduce_perf -b 8 -e 128M -f 2 -g 2
+NCCL_DEBUG=INFO ./build/reduce_scatter_perf -b 8 -e 128M -f 2 -g 2
+```
+
+enabling trace, refer to <https://github.com/NVIDIA/nccl/issues/197>:
+
+```bash
+NCCL_DEBUG=INFO NCCL_DEBUG_FLAGS=TRACE ./build/all_reduce_perf -b 8 -e 128M -f 2 -g 2
+```
+
+Issue: 1, library out of sync, refer to <http://sd.jtimothyking.com/2018/07/26/stub-file-and-library-file-out-of-sync/>  
+
+```bash
+sudo mv /Library/Developer/CommandLineTools /Library/Developer/CommandLineTools.old
+xcode-select --install
+sudo rm -rf /Library/Developer/CommandLineTools.old
+```
+
+Issue: 2, create network, refer to https://github.com/NVIDIA/nccl/issues/352
+
+```bash
+export DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH:~/Documents/05_machine_learning/dl_gpu_mac/drivers_mac/nccl-osx/build/lib #load dynamic library from runtime
+NCCL_DEBUG=INFO NCCL_SOCKET_IFNAME=lo NCCL_SOCKET_IFNAME=lo ./build/all_reduce_perf -b 8 -e 128M -f 2 -g 2 #fix socket issue, passed -> need to check shutdown logics
+NCCL_DEBUG=INFO NCCL_SOCKET_IFNAME=lo NCCL_SOCKET_IFNAME=lo ./build/all_gather_perf -b 8 -e 128M -f 2 -g 2 #passed
+NCCL_DEBUG=INFO NCCL_SOCKET_IFNAME=lo NCCL_SOCKET_IFNAME=lo ./build/broadcast_perf -b 8 -e 128M -f 2 -g 2 #
+NCCL_DEBUG=INFO NCCL_SOCKET_IFNAME=lo NCCL_SOCKET_IFNAME=lo ./build/reduce_perf -b 8 -e 128M -f 2 -g 2 #
+NCCL_DEBUG=INFO NCCL_SOCKET_IFNAME=lo NCCL_SOCKET_IFNAME=lo ./build/reduce_scatter_perf -b 8 -e 128M -f 2 -g 2 #
+```

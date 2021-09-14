@@ -8,17 +8,10 @@
 #include "common.h"
 
 void print_header() {
-  PRINT("# %10s  %12s  %8s            out-of-place                       in-place          \n", "", "", "");
-  PRINT("# %10s  %12s  %8s  %7s  %6s  %6s  %5s  %7s  %6s  %6s  %5s\n", "size", "count", "type",
-        "time", "algbw", "busbw", "error", "time", "algbw", "busbw", "error");
-  PRINT("# %10s  %12s  %8s  %7s  %6s  %6s  %5s  %7s  %6s  %6s  %5s\n", "(B)", "(elements)", "",
-        "(us)", "(GB/s)", "(GB/s)", "", "(us)", "(GB/s)", "(GB/s)", "");
-}
 
 void print_line_header (size_t size, size_t count, const char *typeName, const char *opName, int root) {
   PRINT("%12li  %12li  %8s", size, count, typeName);
 }
-
 void AllGatherGetCollByteCount(size_t *sendcount, size_t *recvcount, size_t *paramcount, size_t *sendInplaceOffset, size_t *recvInplaceOffset, size_t count, int nranks) {
   *sendcount = count/nranks;
   *recvcount = (count/nranks)*nranks;
@@ -48,7 +41,7 @@ testResult_t AllGatherInitData(struct threadArgs* args, ncclDataType_t type, ncc
 }
 
 void AllGatherGetBw(size_t count, int typesize, double sec, double* algBw, double* busBw, int nranks) {
-  double baseBw = (double)(count * typesize * nranks) / 1.0E9 / sec;
+  double baseBw = (double)(count * typesize * (nranks - 1)) / 1.0E9 / sec;
 
   *algBw = baseBw;
   double factor = ((double)(nranks - 1))/((double)nranks);
@@ -84,7 +77,7 @@ testResult_t AllGatherRunTest(struct threadArgs* args, int root, ncclDataType_t 
     run_types = &type;
     run_typenames = &typeName;
   } else {
-    type_count = test_typenum;
+    type_count = ncclNumTypes;
     run_types = test_types;
     run_typenames = test_typenames;
   }
@@ -95,9 +88,16 @@ testResult_t AllGatherRunTest(struct threadArgs* args, int root, ncclDataType_t 
   return testSuccess;
 }
 
-struct testEngine allGatherEngine = {
-  AllGatherGetBuffSize,
-  AllGatherRunTest
-};
-
-#pragma weak ncclTestEngine=allGatherEngine
+// refer to https://github.com/NVIDIA/nccl-tests/issues/50
+#if defined(__APPLE__) && defined(__MACH__)
+  struct testEngine ncclTestEngine = {
+    AllGatherGetBuffSize,
+    AllGatherRunTest
+  };
+#else
+  struct testEngine allGatherEngine = {
+    AllGatherGetBuffSize,
+    AllGatherRunTest
+  };
+  #pragma weak ncclTestEngine=allGatherEngine
+#endif

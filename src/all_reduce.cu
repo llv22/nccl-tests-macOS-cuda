@@ -8,10 +8,10 @@
 #include "common.h"
 
 void print_header() {
-  PRINT("# %10s  %12s  %8s  %6s            out-of-place                       in-place          \n", "", "", "", "");
-  PRINT("# %10s  %12s  %8s  %6s  %7s  %6s  %6s  %5s  %7s  %6s  %6s  %5s\n", "size", "count", "type", "redop",
+  PRINT("# %10s  %12s  %6s  %6s            out-of-place                       in-place          \n", "", "", "", "");
+  PRINT("# %10s  %12s  %6s  %6s  %7s  %6s  %6s  %5s  %7s  %6s  %6s  %5s\n", "size", "count", "type", "redop",
         "time", "algbw", "busbw", "error", "time", "algbw", "busbw", "error");
-  PRINT("# %10s  %12s  %8s  %6s  %7s  %6s  %6s  %5s  %7s  %6s  %6s  %5s\n", "(B)", "(elements)", "", "",
+  PRINT("# %10s  %12s  %6s  %6s  %7s  %6s  %6s  %5s  %7s  %6s  %6s  %5s\n", "(B)", "(elements)", "", "",
         "(us)", "(GB/s)", "(GB/s)", "", "(us)", "(GB/s)", "(GB/s)", "");
 }
 
@@ -83,7 +83,7 @@ testResult_t AllReduceRunTest(struct threadArgs* args, int root, ncclDataType_t 
     run_types = &type;
     run_typenames = &typeName;
   } else {
-    type_count = test_typenum;
+    type_count = ncclNumTypes;
     run_types = test_types;
     run_typenames = test_typenames;
   }
@@ -93,7 +93,7 @@ testResult_t AllReduceRunTest(struct threadArgs* args, int root, ncclDataType_t 
     run_ops = &op;
     run_opnames = &opName;
   } else {
-    op_count = test_opnum;
+    op_count = ncclNumOps;
     run_ops = test_ops;
     run_opnames = test_opnames;
   }
@@ -106,9 +106,16 @@ testResult_t AllReduceRunTest(struct threadArgs* args, int root, ncclDataType_t 
   return testSuccess;
 }
 
-struct testEngine allReduceEngine = {
-  AllReduceGetBuffSize,
-  AllReduceRunTest
-};
-
-#pragma weak ncclTestEngine=allReduceEngine
+// refer to https://github.com/NVIDIA/nccl-tests/issues/50
+#if defined(__APPLE__) && defined(__MACH__)
+  struct testEngine ncclTestEngine = {
+    AllReduceGetBuffSize,
+    AllReduceRunTest
+  };
+#else
+  struct testEngine allReduceEngine = {
+    AllReduceGetBuffSize,
+    AllReduceRunTest
+  };
+  #pragma weak ncclTestEngine=allReduceEngine
+#endif

@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2015-2021, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2015-2019, NVIDIA CORPORATION. All rights reserved.
 #
 # See LICENSE.txt for license information
 #
@@ -9,7 +9,7 @@ PREFIX ?= /usr/local
 VERBOSE ?= 0
 DEBUG ?= 0
 
-CUDA_LIB ?= $(CUDA_HOME)/lib64
+CUDA_LIB ?= $(CUDA_HOME)/lib
 CUDA_INC ?= $(CUDA_HOME)/include
 NVCC = $(CUDA_HOME)/bin/nvcc
 
@@ -27,16 +27,24 @@ NVCC_GENCODE ?= -gencode=arch=compute_60,code=sm_60 \
 else
 NVCC_GENCODE ?= -gencode=arch=compute_35,code=sm_35 \
                 -gencode=arch=compute_50,code=sm_50 \
-                -gencode=arch=compute_60,code=sm_60 \
+		-gencode=arch=compute_60,code=sm_60 \
                 -gencode=arch=compute_61,code=sm_61 \
-                -gencode=arch=compute_70,code=sm_70 \
-                -gencode=arch=compute_70,code=compute_70
+		-gencode=arch=compute_70,code=compute_70 \
+		-gencode=arch=compute_70,code=sm_70
+
+NVCUFLAGS  := -ccbin $(CXX) $(NVCC_GENCODE) -std=c++14
+
+# https://stackoverflow.com/questions/32174861/why-implicit-declaration-of-pthread-yield-with-lpthread-while-all-ok-with-pthr
+# https://github.com/bittorrent/libutp/commit/7732c1556e5adffd984b6a458af3f7cc457c82e7
+lrt:=$(shell echo "int main() {}"|gcc -x c - -lrt 2>&1)
+
+ifeq ($(lrt),)
+	LDFLAGS    := -L${CUDA_LIB} -lcudart -lrt
+	NVLDFLAGS  := -L${CUDA_LIB} -lcudart -lrt
+else
+	LDFLAGS    := -L${CUDA_LIB} -lcudart
+	NVLDFLAGS  := -L${CUDA_LIB} -lcudart
 endif
-
-NVCUFLAGS  := -ccbin $(CXX) $(NVCC_GENCODE) -std=c++11
-
-LDFLAGS    := -L${CUDA_LIB} -lcudart -lrt
-NVLDFLAGS  := -L${CUDA_LIB} -lcudart -lrt
 
 ifeq ($(DEBUG), 0)
 NVCUFLAGS += -O3 -g

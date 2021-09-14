@@ -8,10 +8,10 @@
 #include "common.h"
 
 void print_header() {
-  PRINT("# %10s  %12s  %8s  %6s            out-of-place                       in-place          \n", "", "", "", "");
-  PRINT("# %10s  %12s  %8s  %6s  %7s  %6s  %6s  %5s  %7s  %6s  %6s  %5s\n", "size", "count", "type", "redop",
+  PRINT("# %10s  %12s  %6s  %6s            out-of-place                       in-place          \n", "", "", "", "");
+  PRINT("# %10s  %12s  %6s  %6s  %7s  %6s  %6s  %5s  %7s  %6s  %6s  %5s\n", "size", "count", "type", "redop",
         "time", "algbw", "busbw", "error", "time", "algbw", "busbw", "error");
-  PRINT("# %10s  %12s  %8s  %6s  %7s  %6s  %6s  %5s  %7s  %6s  %6s  %5s\n", "(B)", "(elements)", "", "",
+  PRINT("# %10s  %12s  %6s  %6s  %7s  %6s  %6s  %5s  %7s  %6s  %6s  %5s\n", "(B)", "(elements)", "", "",
         "(us)", "(GB/s)", "(GB/s)", "", "(us)", "(GB/s)", "(GB/s)", "");
 }
 
@@ -47,7 +47,7 @@ testResult_t ReduceScatterInitData(struct threadArgs* args, ncclDataType_t type,
 }
 
 void ReduceScatterGetBw(size_t count, int typesize, double sec, double* algBw, double* busBw, int nranks) {
-  double baseBw = (double)(count * typesize * nranks) / 1.0E9 / sec;
+  double baseBw = (double)(count * typesize * (nranks - 1)) / 1.0E9 / sec;
 
   *algBw = baseBw;
   double factor = ((double)(nranks - 1))/((double)nranks);
@@ -94,7 +94,7 @@ testResult_t ReduceScatterRunTest(struct threadArgs* args, int root, ncclDataTyp
     run_opnames = &opName;
     op_count = 1;
   } else {
-    op_count = test_opnum;
+    op_count = sizeof(test_ops)/sizeof(test_ops[0]);
     run_ops = test_ops;
     run_opnames = test_opnames;
   }
@@ -107,9 +107,18 @@ testResult_t ReduceScatterRunTest(struct threadArgs* args, int root, ncclDataTyp
   return testSuccess;
 }
 
-struct testEngine reduceScatterEngine = {
-  ReduceScatterGetBuffSize,
-  ReduceScatterRunTest
-};
+// refer to https://github.com/NVIDIA/nccl-tests/issues/50
+#if defined(__APPLE__) && defined(__MACH__)
+  struct testEngine ncclTestEngine = {
+    ReduceScatterGetBuffSize,
+    ReduceScatterRunTest
+  };
+#else
+  struct testEngine reduceScatterEngine = {
+    ReduceScatterGetBuffSize,
+    ReduceScatterRunTest
+  };
+  #pragma weak ncclTestEngine=reduceScatterEngine
+#endif
 
-#pragma weak ncclTestEngine=reduceScatterEngine
+

@@ -147,12 +147,6 @@ template<> __device__
 float toFloat(half a) {
   return __half2float(a);
 }
-#if defined(__CUDA_BF16_TYPES_EXIST__)
-template<> __device__
-float toFloat(__nv_bfloat16 a) {
-  return __bfloat162float(a);
-}
-#endif
 
 template<typename T, int BSIZE> __global__
 void deltaKern(void* A_, void* B_, size_t count, double* max) {
@@ -167,52 +161,15 @@ void deltaKern(void* A_, void* B_, size_t count, double* max) {
     if( delta > locmax ) {
       locmax = delta;
 #ifdef DEBUG_PRINT
-      if (delta > .1) printf("Error at %ld/%ld(%p) : %f != %f\n", i, count, B+i, toFloat(A[i]), toFloat(B[i]));
+      if (delta > .1) printf("Error at %d/%ld : %f != %f\n", i, count, toFloat(A[i]), toFloat(B[i]));
 #endif
     }
   }
 
-  tid = threadIdx.x;
-  temp[tid] = locmax;
-  for(int stride = BSIZE/2; stride > 1; stride>>=1) {
-    __syncthreads();
-    if( tid < stride )
-      temp[tid] = temp[tid] > temp[tid+stride] ? temp[tid] : temp[tid+stride];
-  }
-  __syncthreads();
-  if( threadIdx.x == 0)
-    max[blockIdx.x] = temp[0] > temp[1] ? temp[0] : temp[1];
-}
-
-testResult_t CheckDelta(void* results, void* expected, size_t count, ncclDataType_t type, double* devmax) {
-  switch (type) {
-#if defined(__CUDA_BF16_TYPES_EXIST__)
-    case ncclBfloat16:
-      deltaKern<__nv_bfloat16, 512><<<NUM_BLOCKS, 512>>>(results, expected, count, devmax); break;
-#endif
-    case ncclHalf:
-      deltaKern<half, 512><<<NUM_BLOCKS, 512>>>(results, expected, count, devmax); break;
-    case ncclFloat:
-      deltaKern<float, 512><<<NUM_BLOCKS, 512>>>(results, expected, count, devmax); break;
-    case ncclDouble:
-      deltaKern<double, 512><<<NUM_BLOCKS, 512>>>(results, expected, count, devmax); break;
-
-    case ncclChar:
-#if NCCL_MAJOR >= 2
-    case ncclUint8:
-#endif
-      deltaKern<uint8_t, 512><<<NUM_BLOCKS, 512>>>(results, expected, count, devmax); break;
-    case ncclInt:
-#if NCCL_MAJOR >= 2
-    case ncclUint32:
-#endif
-      deltaKern<uint32_t, 512><<<NUM_BLOCKS, 512>>>(results, expected, count, devmax); break;
     case ncclInt64:
-    case ncclUint64:
       deltaKern<uint64_t, 512><<<NUM_BLOCKS, 512>>>(results, expected, count, devmax); break;
   }
   CUDACHECK(cudaDeviceSynchronize());
-  for (int i=1; i<NUM_BLOCKS; i++) devmax[0] = std::max(devmax[0], devmax[i]);
   return testSuccess;
 }
 
@@ -226,23 +183,13 @@ __device__ T testValue(const size_t offset, const int rep, const int rank) {
 // For floating point datatype, we use values between 0 and 1 otherwise the
 // Product operation will produce NaNs.
 template<>
-__device__ double testValue<double>(const size_t offset, const int rep, const int rank) {
-  return 1.0/(1.0+(double)testValue<int>(offset, rep, rank));
-}
 template<>
 __device__ float testValue<float>(const size_t offset, const int rep, const int rank) {
-  return 1.0/(1.0+(float)testValue<int>(offset, rep, rank));
 }
 template<>
 __device__ half testValue<half>(const size_t offset, const int rep, const int rank) {
   return __float2half(testValue<float>(offset, rep, rank));
 }
-#if defined(__CUDA_BF16_TYPES_EXIST__)
-template<>
-__device__ __nv_bfloat16 testValue<__nv_bfloat16>(const size_t offset, const int rep, const int rank) {
-  return __float2bfloat16(testValue<float>(offset, rep, rank));
-}
-#endif
 
 // Operations
 template<typename T>
@@ -264,50 +211,22 @@ __device__ half ncclOpMax(half a, half b) { return __half2float(a)>__half2float(
 template<>
 __device__ half ncclOpMin(half a, half b) { return __half2float(a)<__half2float(b) ? a : b; }
 
-template<typename T>
-__device__ T ncclPostOpIdent(T x, int n) { return x; }
-
-template<typename T>
-__device__ T ncclPostOpDiv(T x, int n) { return x/n; }
-template<>
-__device__ half ncclPostOpDiv<half>(half x, int n) { return __float2half(__half2float(x)/n); }
-#if defined(__CUDA_BF16_TYPES_EXIST__)
-template<>
-__device__ __nv_bfloat16 ncclPostOpDiv<__nv_bfloat16>(__nv_bfloat16 x, int n) { return __float2bfloat16(__bfloat162float(x)/n); }
-#endif
-
-template<typename T, T (*Op)(T, T), T(*PostOp)(T,int)>
+template<typename T, T (*Op)(T, T)>
 __global__ void InitDataReduceKernel(T* data, const size_t N, const size_t offset, const int rep, const int nranks) {
   for (size_t o=blockIdx.x*blockDim.x+threadIdx.x; o<N; o+=gridDim.x*blockDim.x) {
     T val = testValue<T>(o+offset, rep, 0);
     for (int i=1; i<nranks; i++) {
       val = Op(val, testValue<T>(o+offset, rep, i));
     }
-    data[o] = PostOp(val, nranks);
+    data[o] = val;
   }
 }
 
-#define KERN(type, op, postop) (void*)InitDataReduceKernel<type, op<type>, postop<type> >
-#if NCCL_VERSION_CODE >= NCCL_VERSION(2,10,0)
-  #define OPS(type) \
-    KERN(type, ncclOpSum, ncclPostOpIdent), \
-    KERN(type, ncclOpProd, ncclPostOpIdent), \
-    KERN(type, ncclOpMax, ncclPostOpIdent), \
-    KERN(type, ncclOpMin, ncclPostOpIdent), \
-    KERN(type, ncclOpSum/*Avg*/, ncclPostOpDiv)
-#else
-  #define OPS(type) \
-    KERN(type, ncclOpSum, ncclPostOpIdent), \
-    KERN(type, ncclOpProd, ncclPostOpIdent), \
-    KERN(type, ncclOpMax, ncclPostOpIdent), \
-    KERN(type, ncclOpMin, ncclPostOpIdent)
-#endif
+#define KERN(type, op) (void*)InitDataReduceKernel<type, op<type>>
+#define OPS(type) KERN(type, ncclOpSum), KERN(type, ncclOpProd), KERN(type, ncclOpMax), KERN(type, ncclOpMin)
 
 static void* const redInitDataKerns[ncclNumOps*ncclNumTypes] = {
-  OPS(int8_t), OPS(uint8_t), OPS(int32_t), OPS(uint32_t), OPS(int64_t), OPS(uint64_t), OPS(half), OPS(float), OPS(double),
-#if defined(__CUDA_BF16_TYPES_EXIST__) && NCCL_VERSION_CODE >= NCCL_VERSION(2,10,0)
-  OPS(__nv_bfloat16)
-#endif
+  OPS(int8_t), OPS(uint8_t), OPS(int32_t), OPS(uint32_t), OPS(int64_t), OPS(uint64_t), OPS(half), OPS(float), OPS(double)
 };
 
 testResult_t InitDataReduce(void* data, const size_t count, const size_t offset, ncclDataType_t type, ncclRedOp_t op, const int rep, const int nranks) {
@@ -333,10 +252,7 @@ static void* const initDataKerns[ncclNumTypes] = {
   (void*)InitDataKernel<uint64_t>,
   (void*)InitDataKernel<    half>,
   (void*)InitDataKernel<   float>,
-  (void*)InitDataKernel<  double>,
-#if defined(__CUDA_BF16_TYPES_EXIST__) && NCCL_VERSION_CODE >= NCCL_VERSION(2,10,0)
-  (void*)InitDataKernel<__nv_bfloat16>,
-#endif
+  (void*)InitDataKernel<  double>
 };
 
 template<typename T>
@@ -354,8 +270,16 @@ testResult_t InitData(void* data, const size_t count, ncclDataType_t type, const
   return testSuccess;
 }
 
-void Barrier(struct threadArgs* args) {
-  while (args->barrier[args->barrier_idx] != args->thread) pthread_yield();
+void Barrier(struct threadArgs* args)
+{
+  while (args->barrier[args->barrier_idx] != args->thread) {
+    #if defined(__APPLE__) && defined(__MACH__)
+      pthread_yield_np();
+    #else
+      pthread_yield();
+    #endif
+  }
+
   args->barrier[args->barrier_idx] = args->thread + 1;
   if (args->thread+1 == args->nThreads) {
 #ifdef MPI_SUPPORT
@@ -363,37 +287,14 @@ void Barrier(struct threadArgs* args) {
 #endif
     args->barrier[args->barrier_idx] = 0;
   } else {
-    while (args->barrier[args->barrier_idx]) pthread_yield();
-  }
-  args->barrier_idx=!args->barrier_idx;
-}
-
-// Inter-thread/process barrier+allreduce
-void Allreduce(struct threadArgs* args, double* value, int average) {
-  while (args->barrier[args->barrier_idx] != args->thread) pthread_yield();
-  double val = *value;
-  if (args->thread > 0) {
-    double val2 = args->reduce[args->barrier_idx];
-    if (average == 1) val += val2;
-    if (average == 2) val = std::min(val, val2);
-    if (average == 3) val = std::max(val, val2);
-  }
-  if (average || args->thread == 0) args->reduce[args->barrier_idx] = val;
-  args->barrier[args->barrier_idx] = args->thread + 1;
-  if (args->thread+1 == args->nThreads) {
-#ifdef MPI_SUPPORT
-    if (average != 0) {
-      MPI_Op op = average == 1 ? MPI_SUM : average == 2 ? MPI_MIN : MPI_MAX;
-      MPI_Allreduce(MPI_IN_PLACE, (void*)&args->reduce[args->barrier_idx], 1, MPI_DOUBLE, op, MPI_COMM_WORLD);
+    while (args->barrier[args->barrier_idx]) {
+      #if defined(__APPLE__) && defined(__MACH__)
+        pthread_yield_np();
+      #else
+        pthread_yield();
+      #endif
     }
-#endif
-    if (average == 1) args->reduce[args->barrier_idx] /= args->nProcs*args->nThreads;
-    args->reduce[1-args->barrier_idx] = 0;
-    args->barrier[args->barrier_idx] = 0;
-  } else {
-    while (args->barrier[args->barrier_idx]) pthread_yield();
   }
-  *value = args->reduce[args->barrier_idx];
   args->barrier_idx=!args->barrier_idx;
 }
 
@@ -406,7 +307,7 @@ testResult_t CheckData(struct threadArgs* args, ncclDataType_t type, ncclRedOp_t
     NCCLCHECK(ncclCommCuDevice(args->comms[i], &device));
     CUDACHECK(cudaSetDevice(device));
     void *data = in_place ? ((void *)((uintptr_t)args->recvbuffs[i] + args->recvInplaceOffset*rank)) : args->recvbuffs[i];
-    TESTCHECK(CheckDelta(data , args->expected[i], count, type, args->deltaHost));
+    TESTCHECK(CheckDelta(data , args->expected[i], count, type, args->delta));
     maxDelta = std::max(*(args->deltaHost), maxDelta);
 
 #ifdef DEBUG_PRINT
@@ -433,7 +334,7 @@ testResult_t CheckData(struct threadArgs* args, ncclDataType_t type, ncclRedOp_t
 #endif
   }
   double nranks = args->nProcs*args->nThreads*args->nGpus;
-  if (args->reportErrors && maxDelta > DeltaMaxValue(type)*(nranks - 1)) args->errors[0]++;
+  if (maxDelta > DeltaMaxValue(type)*(nranks - 1)) args->errors[0]++;
   *delta = maxDelta;
   return testSuccess;
 }
@@ -459,7 +360,7 @@ testResult_t testStreamSynchronize(int ngpus, cudaStream_t* streams, ncclComm_t*
      if (cudaErr != cudaErrorNotReady) CUDACHECK(cudaErr);
 
 #if NCCL_VERSION_CODE >= NCCL_VERSION(2,4,0)
-     if (test_ncclVersion >= NCCL_VERSION(2,4,0) && comms) {
+     if (comms) {
        ncclResult_t ncclAsyncErr;
        NCCLCHECK(ncclCommGetAsyncError(comms[i], &ncclAsyncErr));
        if (ncclAsyncErr != ncclSuccess) {
@@ -475,9 +376,14 @@ testResult_t testStreamSynchronize(int ngpus, cudaStream_t* streams, ncclComm_t*
    }
 
    // We might want to let other threads (including NCCL threads) use the CPU.
-   if (idle) pthread_yield();
+    if (idle) {
+      #if defined(__APPLE__) && defined(__MACH__)
+        pthread_yield_np();
+      #else
+        pthread_yield();
+      #endif
+    }
   }
-  free(done);
   return testSuccess;
 }
 
@@ -486,8 +392,8 @@ testResult_t startColl(struct threadArgs* args, ncclDataType_t type, ncclRedOp_t
 
   // Try to change offset for each iteration so that we avoid cache effects and catch race conditions in ptrExchange
   size_t totalnbytes = max(args->sendBytes, args->expectedBytes);
-  size_t steps = totalnbytes ? args->maxbytes / totalnbytes : 1;
-  size_t shift = totalnbytes * (iter % steps);
+  size_t shift = (totalnbytes * iter) % args->maxbytes;
+  if (shift + totalnbytes > args->maxbytes) shift = 0;
 
   if (args->nGpus > 1) NCCLCHECK(ncclGroupStart());
   for (int i = 0; i < args->nGpus; i++) {
@@ -523,10 +429,6 @@ testResult_t completeColl(struct threadArgs* args) {
 
 testResult_t BenchTime(struct threadArgs* args, ncclDataType_t type, ncclRedOp_t op, int root, int in_place) {
   size_t count = args->nbytes / wordSize(type);
-  if (datacheck) {
-    // Initialize sendbuffs, recvbuffs and expected
-    TESTCHECK(args->collTest->initData(args, type, op, root, 99, in_place));
-  }
 
   // Sync
   TESTCHECK(startColl(args, type, op, root, in_place, 0));
@@ -554,45 +456,11 @@ testResult_t BenchTime(struct threadArgs* args, ncclDataType_t type, ncclRedOp_t
     }
     if (agg_iters>1) NCCLCHECK(ncclGroupEnd());
   }
-
-#if CUDART_VERSION >= 11030
-  if (cudaGraphLaunches >= 1) {
-    // End cuda graph capture
-    for (int i=0; i<args->nGpus; i++) {
-      CUDACHECK(cudaStreamEndCapture(args->streams[i], graphs+i));
-    }
-    // Instantiate cuda graph
-    for (int i=0; i<args->nGpus; i++) {
-      CUDACHECK(cudaGraphInstantiate(graphExec+i, graphs[i], NULL, NULL, 0));
-    }
-    // Resync CPU, restart timing, launch cuda graph
-    Barrier(args);
-    start = std::chrono::high_resolution_clock::now();
-    for (int l=0; l<cudaGraphLaunches; l++) {
-      for (int i=0; i<args->nGpus; i++) {
-        CUDACHECK(cudaGraphLaunch(graphExec[i], args->streams[i]));
-      }
-    }
-  }
-#endif
-
   TESTCHECK(completeColl(args));
 
   auto delta = std::chrono::high_resolution_clock::now() - start;
   double deltaSec = std::chrono::duration_cast<std::chrono::duration<double>>(delta).count();
   deltaSec = deltaSec/(iters*agg_iters);
-  if (cudaGraphLaunches >= 1) deltaSec = deltaSec/cudaGraphLaunches;
-  Allreduce(args, &deltaSec, average);
-
-#if CUDART_VERSION >= 11030
-  if (cudaGraphLaunches >= 1) {
-    //destroy cuda graph
-    for (int i=0; i<args->nGpus; i++) {
-      CUDACHECK(cudaGraphExecDestroy(graphExec[i]));
-      CUDACHECK(cudaGraphDestroy(graphs[i]));
-    }
-  }
-#endif
 
   double algBw, busBw;
   args->collTest->getBw(count, wordSize(type), deltaSec, &algBw, &busBw, args->nProcs*args->nThreads*args->nGpus);
@@ -606,58 +474,30 @@ testResult_t BenchTime(struct threadArgs* args, ncclDataType_t type, ncclRedOp_t
       // Initialize sendbuffs, recvbuffs and expected
       TESTCHECK(args->collTest->initData(args, type, op, root, rep, in_place));
 
-#if CUDART_VERSION >= 11030
-      if (cudaGraphLaunches >= 1) {
-        // Begin cuda graph capture for data check
-        for (int i=0; i<args->nGpus; i++) {
-          CUDACHECK(cudaStreamBeginCapture(args->streams[i], cudaStreamCaptureModeThreadLocal));
-        }
-      }
-#endif
-
       //test validation in single itertion, should ideally be included into the multi-iteration run
       TESTCHECK(startColl(args, type, op, root, in_place, 0));
-
-#if CUDART_VERSION >= 11030
-      if (cudaGraphLaunches >= 1) {
-        // End cuda graph capture
-        for (int i=0; i<args->nGpus; i++) {
-          CUDACHECK(cudaStreamEndCapture(args->streams[i], graphs+i));
-        }
-        // Instantiate cuda graph
-        for (int i=0; i<args->nGpus; i++) {
-          CUDACHECK(cudaGraphInstantiate(graphExec+i, graphs[i], NULL, NULL, 0));
-        }
-        // Launch cuda graph
-        for (int i=0; i<args->nGpus; i++) {
-          CUDACHECK(cudaGraphLaunch(graphExec[i], args->streams[i]));
-        }
-      }
-#endif
-
       TESTCHECK(completeColl(args));
-
-#if CUDART_VERSION >= 11030
-      if (cudaGraphLaunches >= 1) {
-        //destroy cuda graph
-        for (int i=0; i<args->nGpus; i++) {
-          CUDACHECK(cudaGraphExecDestroy(graphExec[i]));
-          CUDACHECK(cudaGraphDestroy(graphs[i]));
-        }
-      }
-#endif
 
       TESTCHECK(CheckData(args, type, op, root, in_place, &maxDelta));
 
       //aggregate delta from all threads and procs
-      Allreduce(args, &maxDelta, 3);
+      Barrier(args);
+      if (args->thread == 0) {
+        for (int i=1; i<args->nThreads; i++) {
+          maxDelta += args->deltaThreads[i];
+        }
+#ifdef MPI_SUPPORT
+        MPI_Allreduce(MPI_IN_PLACE, &maxDelta, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+#endif
+      }
+      Barrier(args);
   }
 
   double timeUsec = deltaSec*1.0E6;
-  char timeStr[100];
-  if (timeUsec >= 10000.0) {
+  char timeStr[10];
+  if (timeUsec > 10000.0) {
     sprintf(timeStr, "%7.0f", timeUsec);
-  } else if (timeUsec >= 100.0) {
+  } else if (timeUsec > 100.0) {
     sprintf(timeStr, "%7.1f", timeUsec);
   } else {
     sprintf(timeStr, "%7.2f", timeUsec);
@@ -761,7 +601,7 @@ testResult_t threadLaunch(struct testThread* thread) {
 testResult_t AllocateBuffs(void **sendbuff, size_t sendBytes, void **recvbuff, size_t recvBytes, void **expected, size_t nbytes, int nranks) {
     CUDACHECK(cudaMalloc(sendbuff, nbytes));
     CUDACHECK(cudaMalloc(recvbuff, nbytes));
-    if (datacheck) CUDACHECK(cudaMalloc(expected, recvBytes));
+    CUDACHECK(cudaMalloc(expected, recvBytes));
     return testSuccess;
 }
 
@@ -771,19 +611,7 @@ int main(int argc, char* argv[]) {
   // Make sure everyline is flushed so that we see the progress of the test
   setlinebuf(stdout);
 
-  #if NCCL_VERSION_CODE >= NCCL_VERSION(2,4,0)
-    ncclGetVersion(&test_ncclVersion);
-  #else
-    test_ncclVersion = NCCL_VERSION_CODE;
-  #endif
-  //printf("# NCCL_VERSION_CODE=%d ncclGetVersion=%d\n", NCCL_VERSION_CODE, test_ncclVersion);
-  if (NCCL_VERSION_CODE >= NCCL_VERSION(2,10,0) &&  test_ncclVersion < NCCL_VERSION(2,10,0)) {
-    test_opnum -= 1; // exclude ncclAvg
-    test_typenum -= 1; // exclude bfloat16
-  }
-
   // Parse args
-  double parsed;
   int longindex;
   static struct option longopts[] = {
     {"nthreads", required_argument, 0, 't'},
@@ -793,7 +621,7 @@ int main(int argc, char* argv[]) {
     {"stepbytes", required_argument, 0, 'i'},
     {"stepfactor", required_argument, 0, 'f'},
     {"iters", required_argument, 0, 'n'},
-    {"agg_iters", required_argument, 0, 'm'},
+    {"agg-iters", required_argument, 0, 'm'},
     {"warmup_iters", required_argument, 0, 'w'},
     {"parallel_init", required_argument, 0, 'p'},
     {"check", required_argument, 0, 'c'},
@@ -801,14 +629,12 @@ int main(int argc, char* argv[]) {
     {"datatype", required_argument, 0, 'd'},
     {"root", required_argument, 0, 'r'},
     {"blocking", required_argument, 0, 'z'},
-    {"cudagraph", required_argument, 0, 'G'},
-    {"average", required_argument, 0, 'a'},
     {"help", no_argument, 0, 'h'}
   };
 
   while(1) {
     int c;
-    c = getopt_long(argc, argv, "t:g:b:e:i:f:n:m:w:p:c:o:d:r:z:hG:a:", longopts, &longindex);
+    c = getopt_long(argc, argv, "t:g:b:e:i:f:n:m:w:p:c:o:d:r:z:h", longopts, &longindex);
 
     if (c == -1)
       break;
@@ -821,20 +647,10 @@ int main(int argc, char* argv[]) {
         nGpus = strtol(optarg, NULL, 0);
         break;
       case 'b':
-        parsed = parsesize(optarg);
-        if (parsed < 0) {
-          fprintf(stderr, "invalid size specified for 'minbytes'\n");
-          return -1;
-        }
-        minBytes = (size_t)parsed;
+        minBytes = (size_t)parsesize(optarg);
         break;
       case 'e':
-        parsed = parsesize(optarg);
-        if (parsed < 0) {
-          fprintf(stderr, "invalid size specified for 'maxbytes'\n");
-          return -1;
-        }
-        maxBytes = (size_t)parsed;
+        maxBytes = (size_t)parsesize(optarg);
         break;
       case 'i':
         stepBytes = strtol(optarg, NULL, 0);
@@ -846,10 +662,10 @@ int main(int argc, char* argv[]) {
         iters = (int)strtol(optarg, NULL, 0);
         break;
       case 'm':
-#if NCCL_MAJOR > 2 || (NCCL_MAJOR >= 2 && NCCL_MINOR >= 2)
+#if NCCL_MAJOR >= 2 && NCCL_MINOR >= 2
         agg_iters = (int)strtol(optarg, NULL, 0);
 #else
-        fprintf(stderr, "Option -m not supported before NCCL 2.2. Ignoring\n");
+        printf("Option -m not supported before NCCL 2.2. Ignoring\n");
 #endif
         break;
       case 'w':
@@ -873,20 +689,8 @@ int main(int argc, char* argv[]) {
       case 'z':
         blocking_coll = strtol(optarg, NULL, 0);
         break;
-      case 'G':
-#if (NCCL_MAJOR > 2 || (NCCL_MAJOR >= 2 && NCCL_MINOR >= 9)) && CUDART_VERSION >= 11030
-        cudaGraphLaunches = strtol(optarg, NULL, 0);
-#else
-        printf("Option -G (CUDA graph) not supported before NCCL 2.9 + CUDA 11.3. Ignoring\n");
-#endif
-        break;
-      case 'a':
-        average = (int)strtol(optarg, NULL, 0);
-        break;
       case 'h':
-      default:
-        if (c != 'h') printf("invalid option '%c'\n", c);
-        printf("USAGE: %s \n\t"
+	printf("USAGE: %s \n\t"
             "[-t,--nthreads <num threads>] \n\t"
             "[-g,--ngpus <gpus per thread>] \n\t"
             "[-b,--minbytes <min size in bytes>] \n\t"
@@ -894,36 +698,50 @@ int main(int argc, char* argv[]) {
             "[-i,--stepbytes <increment size>] \n\t"
             "[-f,--stepfactor <increment factor>] \n\t"
             "[-n,--iters <iteration count>] \n\t"
-            "[-m,--agg_iters <aggregated iteration count>] \n\t"
+            "[-m,--agg-iters <aggregated iteration count>] \n\t"
             "[-w,--warmup_iters <warmup iteration count>] \n\t"
             "[-p,--parallel_init <0/1>] \n\t"
             "[-c,--check <0/1>] \n\t"
-#if NCCL_VERSION_CODE >= NCCL_VERSION(2,10,0)
-            "[-o,--op <sum/prod/min/max/avg/all>] \n\t"
-#else
             "[-o,--op <sum/prod/min/max/all>] \n\t"
-#endif
             "[-d,--datatype <nccltype/all>] \n\t"
             "[-r,--root <root>] \n\t"
             "[-z,--blocking <0/1>] \n\t"
-            "[-G,--cudagraph <num graph launches>] \n\t"
-            "[-a,--average <0/1/2/3> report average iteration time <0=RANK0/1=AVG/2=MIN/3=MAX>] \n\t"
-            "[-h,--help]\n",
+            "[-y,--stream_null <0/1>] \n\t"
+            "[-k,--side_comp <0/1>] \n\t"
+            "[-l,--replay <path to replay file>] \n\t"
+	    "[-h,--help]\n",
+	    basename(argv[0]));
+	return 0;
+      default:
+        printf("invalid option \n");
+	printf("USAGE: %s \n\t"
+            "[-t,--nthreads <num threads>] \n\t"
+            "[-g,--ngpus <gpus per thread>] \n\t"
+            "[-b,--minbytes <min size in bytes>] \n\t"
+            "[-e,--maxbytes <max size in bytes>] \n\t"
+            "[-i,--stepbytes <increment size>] \n\t"
+            "[-f,--stepfactor <increment factor>] \n\t"
+            "[-n,--iters <iteration count>] \n\t"
+            "[-m,--agg-iters <aggregated iteration count>] \n\t"
+            "[-w,--warmup_iters <warmup iteration count>] \n\t"
+            "[-p,--parallel_init <0/1>] \n\t"
+            "[-c,--check <0/1>] \n\t"
+            "[-o,--op <sum/prod/min/max/all>] \n\t"
+            "[-d,--datatype <nccltype/all>] \n\t"
+            "[-r,--root <root>] \n\t"
+            "[-z,--blocking <0/1>] \n\t"
+            "[-y,--stream_null <0/1>] \n\t"
+            "[-k,--side_comp <0/1>] \n\t"
+            "[-l,--replay <path to replay file>] \n\t"
+	    "[-h,--help]\n",
 	    basename(argv[0]));
 	return 0;
     }
   }
-  if (minBytes > maxBytes) {
-    fprintf(stderr, "invalid sizes for 'minbytes' and 'maxbytes': %llu > %llu\n",
-           (unsigned long long)minBytes,
-           (unsigned long long)maxBytes);
-    return -1;
-  }
 #ifdef MPI_SUPPORT
   MPI_Init(&argc, &argv);
 #endif
-  TESTCHECK(run());
-  return 0;
+  return run();
 }
 
 testResult_t run() {
@@ -955,7 +773,6 @@ testResult_t run() {
 #define MAX_LINE 2048
   char line[MAX_LINE];
   int len = 0;
-  size_t maxMem = ~0;
   for (int i=0; i<nThreads*nGpus; i++) {
     int cudaDev = localRank*nThreads*nGpus+i;
     int rank = proc*nThreads*nGpus+i;
@@ -963,7 +780,6 @@ testResult_t run() {
     CUDACHECK(cudaGetDeviceProperties(&prop, cudaDev));
     len += snprintf(line+len, MAX_LINE-len, "#   Rank %2d Pid %6d on %10s device %2d [0x%02x] %s\n",
                     rank, getpid(), hostname, cudaDev, prop.pciBusID, prop.name);
-    maxMem = std::min(maxMem, prop.totalGlobalMem);
   }
 
 #if MPI_SUPPORT
@@ -975,17 +791,9 @@ testResult_t run() {
       PRINT("%s", lines+MAX_LINE*p);
     free(lines);
   }
-  MPI_Allreduce(MPI_IN_PLACE, &maxMem, 1, MPI_LONG, MPI_MIN, MPI_COMM_WORLD);
 #else
   PRINT("%s", line);
 #endif
-
-  // We need sendbuff, recvbuff, expected (when datacheck enabled), plus 1G for the rest.
-  size_t memMaxBytes = (maxMem - (1<<30)) / (datacheck ? 3 : 2);
-  if (maxBytes > memMaxBytes) {
-    maxBytes = memMaxBytes;
-    if (proc == 0) printf("#\n# Reducing maxBytes to %ld due to memory limitation\n", maxBytes);
-  }
 
   ncclUniqueId ncclId;
   if (proc == 0) {
@@ -1004,7 +812,7 @@ testResult_t run() {
 
   for (int i=0; i<nGpus*nThreads; i++) {
     CUDACHECK(cudaSetDevice(localRank*nThreads*nGpus+i));
-    TESTCHECK(AllocateBuffs(sendbuffs+i, sendBytes, recvbuffs+i, recvBytes, expected+i, (size_t)maxBytes, nProcs*nThreads*nGpus));
+    AllocateBuffs(sendbuffs+i, sendBytes, recvbuffs+i, recvBytes, expected+i, (size_t)maxBytes, nProcs*nThreads*nGpus);
     CUDACHECK(cudaStreamCreateWithFlags(streams+i, cudaStreamNonBlocking));
   }
 
@@ -1028,7 +836,7 @@ testResult_t run() {
   int errors[nThreads];
   double bw[nThreads];
   double* delta;
-  CUDACHECK(cudaHostAlloc(&delta, sizeof(double)*nThreads*NUM_BLOCKS, cudaHostAllocPortable | cudaHostAllocMapped));
+  CUDACHECK(cudaHostAlloc(&delta, sizeof(double)*nThreads, cudaHostAllocPortable | cudaHostAllocMapped));
   int bw_count[nThreads];
   for (int t=0; t<nThreads; t++) {
     bw[t] = 0.0;
@@ -1066,15 +874,14 @@ testResult_t run() {
 
     threads[t].args.barrier = (volatile int*)barrier;
     threads[t].args.barrier_idx = 0;
-    threads[t].args.reduce = (volatile double*)reduce;
     threads[t].args.sync = (volatile int*)sync;
     threads[t].args.sync_idx = 0;
-    threads[t].args.deltaHost = (delta + t*NUM_BLOCKS);
+    threads[t].args.deltaThreads = delta;
+    threads[t].args.deltaHost = (delta + t);
+    threads[t].args.delta = delta;
     threads[t].args.errors=errors+t;
     threads[t].args.bw=bw+t;
     threads[t].args.bw_count=bw_count+t;
-
-    threads[t].args.reportErrors = 1;
 
     threads[t].func = parallel_init ? threadInit : threadRunTests;
     if (t)
@@ -1084,14 +891,12 @@ testResult_t run() {
   }
 
   // Wait for other threads and accumulate stats and errors
-  for (int t=nThreads-1; t>=0; t--) {
+  for (int t=nThreads-1; t>0; t--) {
     if (t) pthread_join(threads[t].thread, NULL);
     TESTCHECK(threads[t].ret);
-    if (t) {
-      errors[0] += errors[t];
-      bw[0] += bw[t];
-      bw_count[0] += bw_count[t];
-    }
+    errors[0] += errors[t];
+    bw[0] += bw[t];
+    bw_count[0] += bw_count[t];
   }
 
 #ifdef MPI_SUPPORT
@@ -1106,9 +911,9 @@ testResult_t run() {
 
   // Free off CUDA allocated memory
   for (int i=0; i<nGpus*nThreads; i++) {
-    if (sendbuffs[i]) CUDACHECK(cudaFree((char*)sendbuffs[i]));
-    if (recvbuffs[i]) CUDACHECK(cudaFree((char*)recvbuffs[i]));
-    if (datacheck) CUDACHECK(cudaFree(expected[i]));
+    CUDACHECK(cudaFree(sendbuffs[i]));
+    CUDACHECK(cudaFree(recvbuffs[i]));
+    CUDACHECK(cudaFree(expected[i]));
   }
   CUDACHECK(cudaFreeHost(delta));
 

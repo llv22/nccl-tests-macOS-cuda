@@ -18,25 +18,25 @@
 #include "nccl1_compat.h"
 
 #define CUDACHECK(cmd) do {                         \
-  cudaError_t err = cmd;                            \
-  if( err != cudaSuccess ) {                        \
+  cudaError_t e = cmd;                              \
+  if( e != cudaSuccess ) {                          \
     char hostname[1024];                            \
     getHostName(hostname, 1024);                    \
     printf("%s: Test CUDA failure %s:%d '%s'\n",    \
          hostname,                                  \
-        __FILE__,__LINE__,cudaGetErrorString(err)); \
+        __FILE__,__LINE__,cudaGetErrorString(e));   \
     return testCudaError;                           \
   }                                                 \
 } while(0)
 
 #define NCCLCHECK(cmd) do {                         \
-  ncclResult_t res = cmd;                           \
-  if (res != ncclSuccess) {                         \
+  ncclResult_t r = cmd;                             \
+  if (r!= ncclSuccess) {                            \
     char hostname[1024];                            \
     getHostName(hostname, 1024);                    \
     printf("%s: Test NCCL failure %s:%d '%s'\n",    \
          hostname,                                  \
-        __FILE__,__LINE__,ncclGetErrorString(res)); \
+        __FILE__,__LINE__,ncclGetErrorString(r));   \
     return testNcclError;                           \
   }                                                 \
 } while(0)
@@ -55,8 +55,8 @@ typedef enum {
   if (r!= testSuccess) {                            \
     char hostname[1024];                            \
     getHostName(hostname, 1024);                    \
-    printf(" .. %s pid %d: Test failure %s:%d\n",   \
-         hostname, getpid(),                        \
+    printf(" .. %s: Test failure %s:%d\n",          \
+         hostname,                                  \
         __FILE__,__LINE__);                         \
     return r;                                       \
   }                                                 \
@@ -79,12 +79,7 @@ extern struct testColl allGatherTest;
 extern struct testColl reduceScatterTest;
 extern struct testColl broadcastTest;
 extern struct testColl reduceTest;
-extern struct testColl alltoAllTest;
 
-struct testEngine {
-  void (*getBuffSize)(size_t *sendcount, size_t *recvcount, size_t count, int nranks);
-  testResult_t (*runTest)(struct threadArgs* args, int root, ncclDataType_t type,
-      const char* typeName, ncclRedOp_t op, const char* opName);
 };
 
 extern struct testEngine ncclTestEngine;
@@ -124,8 +119,6 @@ struct threadArgs {
   int* errors;
   double* bw;
   int* bw_count;
-
-  int reportErrors;
 
   struct testColl* collTest;
 };
@@ -259,6 +252,32 @@ static int ncclstringtotype(char *str) {
 
 static int ncclstringtoop (char *str) {
     for (int o=0; o<test_opnum; o++) {
+      if (strcmp(str, test_opnames[o]) == 0) {
+        return o;
+      }
+    }
+    if (strcmp(str, "all") == 0) {
+      return -1;
+    }
+    printf("invalid op %s, defaulting to %s .. \n", str, test_opnames[ncclSum]);
+    return ncclSum;
+}
+
+static int ncclstringtotype(char *str) {
+    for (int t=0; t<ncclNumTypes; t++) {
+      if (strcmp(str, test_typenames[t]) == 0) {
+        return t;
+      }
+    }
+    if (strcmp(str, "all") == 0) {
+      return -1;
+    }
+    printf("invalid type %s, defaulting to %s .. \n", str, test_typenames[ncclFloat]);
+    return ncclFloat;
+}
+
+static int ncclstringtoop (char *str) {
+    for (int o=0; o<ncclNumOps; o++) {
       if (strcmp(str, test_opnames[o]) == 0) {
         return o;
       }
