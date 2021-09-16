@@ -117,9 +117,9 @@ Issue: 2, create network, refer to https://github.com/NVIDIA/nccl/issues/352
 
 ```bash
 export DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH:~/Documents/05_machine_learning/dl_gpu_mac/drivers_mac/nccl-osx/build/lib #load dynamic library from runtime
-NCCL_DEBUG=INFO NCCL_SOCKET_IFNAME=lo NCCL_SOCKET_IFNAME=lo ./build/all_reduce_perf -b 8 -e 128M -f 2 -g 2 #fix socket issue, passed -> need to check shutdown logics
-NCCL_DEBUG=INFO NCCL_SOCKET_IFNAME=lo NCCL_SOCKET_IFNAME=lo ./build/all_gather_perf -b 8 -e 128M -f 2 -g 2 #passed
-NCCL_DEBUG=INFO NCCL_SOCKET_IFNAME=lo NCCL_SOCKET_IFNAME=lo ./build/broadcast_perf -b 8 -e 128M -f 2 -g 2 #
-NCCL_DEBUG=INFO NCCL_SOCKET_IFNAME=lo NCCL_SOCKET_IFNAME=lo ./build/reduce_perf -b 8 -e 128M -f 2 -g 2 #
-NCCL_DEBUG=INFO NCCL_SOCKET_IFNAME=lo NCCL_SOCKET_IFNAME=lo ./build/reduce_scatter_perf -b 8 -e 128M -f 2 -g 2 #
+NCCL_DEBUG=INFO NCCL_SOCKET_IFNAME=lo ./build/all_reduce_perf -b 8 -e 128M -f 2 -g 2 #fix socket issue, passed -> need to check shutdown logics
+NCCL_DEBUG=INFO NCCL_SOCKET_IFNAME=lo ./build/all_gather_perf -b 8 -e 128M -f 2 -g 2 #passed
+NCCL_DEBUG=INFO NCCL_SOCKET_IFNAME=lo ./build/broadcast_perf -b 8 -e 128M -f 2 -g 2 #
+NCCL_DEBUG=INFO NCCL_SOCKET_IFNAME=lo ./build/reduce_perf -b 8 -e 128M -f 2 -g 2 #
+NCCL_DEBUG=INFO NCCL_SOCKET_IFNAME=lo ./build/reduce_scatter_perf -b 8 -e 128M -f 2 -g 2 #
 ```

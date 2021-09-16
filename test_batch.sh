@@ -9,13 +9,13 @@ allScripts=("all_reduce_perf" "all_gather_perf" "broadcast_perf" "reduce_perf" "
 if [ "$1" == "log" ]; then
     for t in ${allScripts[@]}; do
         echo "===begin $t test==="
-        NCCL_DEBUG=INFO NCCL_SOCKET_IFNAME=lo NCCL_SOCKET_IFNAME=lo ./build/$t -b 8 -e 128M -f 2 -g 2 #fix socket issue, passed -> need to check shutdown logics
+        NCCL_DEBUG=INFO NCCL_SOCKET_IFNAME=lo ./build/$t -b 8 -e 128M -f 2 -g 2 #fix socket issue, passed -> need to check shutdown logics
         echo ""
     done
 elif [ "$1" == "normal" ]; then
     for t in ${allScripts[@]}; do
         echo "===begin $t test==="
-        NCCL_SOCKET_IFNAME=lo NCCL_SOCKET_IFNAME=lo ./build/$t -b 8 -e 128M -f 2 -g 2 #fix socket issue, passed -> need to check shutdown logics
+        NCCL_SOCKET_IFNAME=lo ./build/$t -b 8 -e 128M -f 2 -g 2 #fix socket issue, passed -> need to check shutdown logics
         echo ""
     done
 else
