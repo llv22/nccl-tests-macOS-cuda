@@ -123,3 +123,9 @@ NCCL_DEBUG=INFO NCCL_SOCKET_IFNAME=lo ./build/broadcast_perf -b 8 -e 128M -f 2 -
 NCCL_DEBUG=INFO NCCL_SOCKET_IFNAME=lo ./build/reduce_perf -b 8 -e 128M -f 2 -g 2 #
 NCCL_DEBUG=INFO NCCL_SOCKET_IFNAME=lo ./build/reduce_scatter_perf -b 8 -e 128M -f 2 -g 2 #
 ```
+
+```bash
+export DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH:~/Documents/05_machine_learning/dl_gpu_mac/drivers_mac/nccl-osx/build/lib #load dynamic library from runtime
+NCCL_DEBUG=INFO NCCL_SOCKET_FAMILY=AF_INET ./build/all_reduce_perf -b 8 -e 128M -f 2 -g 2 #fix socket issue, passed -> need to check shutdown logics
+NCCL_DEBUG=INFO NCCL_SOCKET_FAMILY=AF_INET6 ./build/all_reduce_perf -b 8 -e 128M -f 2 -g 2 #fix socket issue, passed -> need to check shutdown logics
+```
