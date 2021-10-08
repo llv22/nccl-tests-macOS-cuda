@@ -1,6 +1,6 @@
 # NCCL Tests
 
-These tests check both the performance and the correctness of [NCCL](http://github.com/nvidia/nccl) operations.
+These tests check both the performance and the correctness of [NCCL](http://github.com/nvidia/nccl) operations. This branch prepares tests for nccl-macOS 2.9.6+(originated from [Nvidia NCCL 2.9.6](https://github.com/NVIDIA/nccl/releases/tag/v2.9.6-1)), as additional operations have been added since this version.
 
 ## Build
 
