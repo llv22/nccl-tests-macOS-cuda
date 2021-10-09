@@ -9,7 +9,7 @@ allScripts=("sendrecv_perf" "scatter_perf" "hypercube_perf" "alltoall_perf" "all
 if [ "$1" == "log" ]; then
     for t in ${allScripts[@]}; do
         echo "===begin $t test==="
-        NCCL_DEBUG=INFO ./build/$t -b 8 -e 128M -f 2 -g 2 #fix socket issue, passed -> need to check shutdown logics
+        NCCL_TOPO_DUMP_FILE=./topo.xml NCCL_DEBUG=INFO ./build/$t -b 8 -e 128M -f 2 -g 2 #fix socket issue, passed -> need to check shutdown logics
         echo ""
     done
 elif [ "$1" == "normal" ]; then
