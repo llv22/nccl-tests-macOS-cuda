@@ -9,7 +9,7 @@ PREFIX ?= /usr/local
 VERBOSE ?= 0
 DEBUG ?= 0
 
-CUDA_LIB ?= $(CUDA_HOME)/lib64
+CUDA_LIB ?= $(CUDA_HOME)/lib
 CUDA_INC ?= $(CUDA_HOME)/include
 NVCC = $(CUDA_HOME)/bin/nvcc
 
@@ -33,10 +33,10 @@ NVCC_GENCODE ?= -gencode=arch=compute_35,code=sm_35 \
                 -gencode=arch=compute_70,code=compute_70
 endif
 
-NVCUFLAGS  := -ccbin $(CXX) $(NVCC_GENCODE) -std=c++11
+NVCUFLAGS  := -ccbin $(CXX) $(NVCC_GENCODE) -std=c++14
 
-LDFLAGS    := -L${CUDA_LIB} -lcudart -lrt
-NVLDFLAGS  := -L${CUDA_LIB} -lcudart -lrt
+LDFLAGS    := -L${CUDA_LIB} -lcudart
+NVLDFLAGS  := -L${CUDA_LIB} -lcudart
 
 ifeq ($(DEBUG), 0)
 NVCUFLAGS += -O3 -g

@@ -115,9 +115,17 @@ testResult_t ReduceRunTest(struct threadArgs* args, int root, ncclDataType_t typ
   return testSuccess;
 }
 
+// refer to https://github.com/NVIDIA/nccl-tests/issues/50
+#if defined(__APPLE__) && defined(__MACH__)
+  struct testEngine ncclTestEngine = {
+    ReduceGetBuffSize,
+    ReduceRunTest
+  };
+#else
 struct testEngine reduceEngine = {
   ReduceGetBuffSize,
   ReduceRunTest
 };
 
 #pragma weak ncclTestEngine=reduceEngine
+#endif

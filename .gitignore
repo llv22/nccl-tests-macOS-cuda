@@ -3,3 +3,5 @@
 # See LICENCE.txt for license information
 /build
 .DS_Store
+# avoid generated xml
+*.xml

@@ -113,9 +113,17 @@ testResult_t AlltoAllRunTest(struct threadArgs* args, int root, ncclDataType_t t
   return testSuccess;
 }
 
+// refer to https://github.com/NVIDIA/nccl-tests/issues/50
+#if defined(__APPLE__) && defined(__MACH__)
+  struct testEngine ncclTestEngine = {
+    AlltoAllGetBuffSize,
+    AlltoAllRunTest
+  };
+#else
 struct testEngine alltoAllEngine = {
   AlltoAllGetBuffSize,
   AlltoAllRunTest
 };
 
 #pragma weak ncclTestEngine=alltoAllEngine
+#endif

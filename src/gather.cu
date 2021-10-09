@@ -123,9 +123,17 @@ testResult_t GatherRunTest(struct threadArgs* args, int root, ncclDataType_t typ
   return testSuccess;
 }
 
+// refer to https://github.com/NVIDIA/nccl-tests/issues/50
+#if defined(__APPLE__) && defined(__MACH__)
+  struct testEngine ncclTestEngine = {
+    GatherGetBuffSize,
+    GatherRunTest
+  };
+#else
 struct testEngine gatherEngine = {
   GatherGetBuffSize,
   GatherRunTest
 };
 
 #pragma weak ncclTestEngine=gatherEngine
+#endif

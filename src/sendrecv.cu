@@ -119,9 +119,17 @@ testResult_t SendRecvRunTest(struct threadArgs* args, int root, ncclDataType_t t
   return testSuccess;
 }
 
+// refer to https://github.com/NVIDIA/nccl-tests/issues/50
+#if defined(__APPLE__) && defined(__MACH__)
+  struct testEngine ncclTestEngine = {
+    SendRecvGetBuffSize,
+    SendRecvRunTest
+  };
+#else
 struct testEngine sendRecvEngine = {
   SendRecvGetBuffSize,
   SendRecvRunTest
 };
 
 #pragma weak ncclTestEngine=sendRecvEngine
+#endif

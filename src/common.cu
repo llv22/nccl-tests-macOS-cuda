@@ -383,7 +383,13 @@ testResult_t InitData(void* data, const size_t count, ncclDataType_t type, const
 }
 
 void Barrier(struct threadArgs* args) {
-  while (args->barrier[args->barrier_idx] != args->thread) pthread_yield();
+  while (args->barrier[args->barrier_idx] != args->thread) {
+    #if defined(__APPLE__) && defined(__MACH__)
+      pthread_yield_np();
+    #else
+      pthread_yield();
+    #endif
+  }
   args->barrier[args->barrier_idx] = args->thread + 1;
   if (args->thread+1 == args->nThreads) {
 #ifdef MPI_SUPPORT
@@ -391,14 +397,26 @@ void Barrier(struct threadArgs* args) {
 #endif
     args->barrier[args->barrier_idx] = 0;
   } else {
-    while (args->barrier[args->barrier_idx]) pthread_yield();
+    while (args->barrier[args->barrier_idx]) {
+      #if defined(__APPLE__) && defined(__MACH__)
+        pthread_yield_np();
+      #else
+        pthread_yield();
+      #endif
+    }
   }
   args->barrier_idx=!args->barrier_idx;
 }
 
 // Inter-thread/process barrier+allreduce
 void Allreduce(struct threadArgs* args, double* value, int average) {
-  while (args->barrier[args->barrier_idx] != args->thread) pthread_yield();
+  while (args->barrier[args->barrier_idx] != args->thread) {
+    #if defined(__APPLE__) && defined(__MACH__)
+      pthread_yield_np();
+    #else
+      pthread_yield();
+    #endif
+  }
   double val = *value;
   if (args->thread > 0) {
     double val2 = args->reduce[args->barrier_idx];
@@ -419,7 +437,13 @@ void Allreduce(struct threadArgs* args, double* value, int average) {
     args->reduce[1-args->barrier_idx] = 0;
     args->barrier[args->barrier_idx] = 0;
   } else {
-    while (args->barrier[args->barrier_idx]) pthread_yield();
+    while (args->barrier[args->barrier_idx]) {
+      #if defined(__APPLE__) && defined(__MACH__)
+        pthread_yield_np();
+      #else
+        pthread_yield();
+      #endif
+    }
   }
   *value = args->reduce[args->barrier_idx];
   args->barrier_idx=!args->barrier_idx;
@@ -503,7 +527,13 @@ testResult_t testStreamSynchronize(int ngpus, cudaStream_t* streams, ncclComm_t*
    }
 
    // We might want to let other threads (including NCCL threads) use the CPU.
-   if (idle) pthread_yield();
+   if (idle) {
+      #if defined(__APPLE__) && defined(__MACH__)
+        pthread_yield_np();
+      #else
+        pthread_yield();
+      #endif
+    }
   }
   free(done);
   return testSuccess;

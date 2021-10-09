@@ -81,6 +81,7 @@ add ```export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/i058959/dl-frameworks/nccl/
 
 ```bash
 make NCCL_HOME=/Users/llv23/Documents/05_machine_learning/dl_gpu_mac/drivers_mac/nccl-osx/nccl-2.5.7 CXX=clang++ -j12  
+make NCCL_HOME=/Users/llv23/Documents/05_machine_learning/dl_gpu_mac/drivers_mac/nccl-osx/build CXX=clang++ -j12  
 ./build/all_reduce_perf -b 8 -e 128M -f 2 -g 2
 ./build/all_gather_perf -b 8 -e 128M -f 2 -g 2
 ./build/broadcast_perf -b 8 -e 128M -f 2 -g 2
