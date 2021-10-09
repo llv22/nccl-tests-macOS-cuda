@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env bash
+#!/bin/bash
 if [ "$#" -ne "1" ]; then
     echo 'test_bash.sh: only support to enter trace parameters - log/normal'
     exit 1
